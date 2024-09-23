@@ -1,29 +1,41 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import Canvas, Button, Frame
 from PIL import Image, ImageTk
 import random
-import winsound
 import threading
+import pygame
+import time
 
 class TomatoThrowGame:
     def __init__(self, root):
         self.root = root
         self.root.title("Tomato Throwing Game")
-        self.root.geometry("800x600")
+        canvas = Canvas(root, width=1200, height=700)
+        canvas.pack()
 
-        # Pisteet
-        self.scores = {"Kernesti": 0, "Ernesti": 0}
-        self.lead = None
+        # Pisteiden laskenta
+        self.ernesti_score = 0
+        self.kernesti_score = 0
 
         # Kuvat
-        self.kernesti_img = self.load_image("C:/Users/Terhi/Desktop/OAMK/3. vuosi/Advanced Software/kerne.png", (100, 100))
-        self.ernesti_img = self.load_image("C:/Users/Terhi/Desktop/OAMK/3. vuosi/Advanced Software/erne.png", (100, 100))
-        self.target_img = self.load_image("C:/Users/Terhi/Desktop/OAMK/3. vuosi/Advanced Software/maalitaulu.png", (200, 200))
-        self.tomato_img = self.load_image("C:/Users/Terhi/Desktop/OAMK/3. vuosi/Advanced Software/tomato.png", (30, 30))
-        self.splat_img = self.load_image("C:/Users/Terhi/Desktop/OAMK/3. vuosi/Advanced Software/splat.png", (50, 50))
+        self.kernesti_img = self.load_image("kerne.png", (200, 200))
+        self.ernesti_img = self.load_image("erne.png", (200, 200))
+        self.maalitaulu_img = self.load_image("maalitaulu.png", (400, 400))
+        self.tomaatti_img = self.load_image("tomaatti.png", (90, 70))
+        self.tosuma_img = self.load_image("tosuma.png", (150, 150))
 
         # UI:n rakentaminen
         self.build_ui()
+
+        # Äänet
+        pygame.mixer.init()
+        self.throw_sound = pygame.mixer.Sound("heitto.mp3")
+        self.hit_sound = pygame.mixer.Sound("osuma.mp3")
+        self.end_sound = pygame.mixer.Sound("loppu.mp3")
+        self.missed_sound = pygame.mixer.Sound("ohitus.mp3")
+
+    def play_sound(sound):
+        sound.play()
 
     def load_image(self, path, size):
         try:
@@ -37,97 +49,145 @@ class TomatoThrowGame:
     def build_ui(self):
         # Kernesti vasemmalle reunalle
         self.kernesti_label = tk.Label(self.root, image=self.kernesti_img)
-        x=0
-        y=random.randint(0, 500)
-        self.kernesti_label.place(x=x, y=y)
+        kernesti_x = 0
+        kernesti_y = random.randint(0, 500)
+        self.kernesti_label.place(x=kernesti_x, y=kernesti_y)
 
         # Maalitaulu keskelle
-        self.target_label = tk.Label(self.root, image=self.target_img)
-        x=400-100
-        y=300-100
-        self.target_label.place(x=x, y=y)
-
-        # Ernesti oikealle reunalle
-        self.ernesti_move_btn = tk.Button(self.root, text="Move Ernesti", command=self.move_ernesti)
-        self.ernesti_move_btn.pack()
-        self.ernesti_label = tk.Label(self.root, image=self.ernesti_img)
-        x=800-100
-        y=random.randint(0, 500)
-        self.ernesti_label.place(x=x, y=y)
-
-        # Heittopainikkeet
-        self.throw_kernesti = tk.Button(self.root, text="Kernesti heittää", command=lambda: self.throw_tomato("Kernesti"))
-        self.throw_kernesti.pack()
-        self.throw_ernesti = tk.Button(self.root, text="Ernesti heittää", command=lambda: self.throw_tomato("Ernesti"))
-        self.throw_ernesti.pack()
+        self.target_label = tk.Label(self.root, image=self.maalitaulu_img)
+        maalitaulu_x = 400-100
+        maalitaulu_y = 300-100
+        self.target_label.place(x=maalitaulu_x, y=maalitaulu_y)
 
         # Tulokset
-        self.score_display = tk.Label(self.root, text="Kernesti: 0 | Ernesti: 0")
-        self.score_display.pack()
+        self.score_display = tk.Label(self.root, text="Pisteet: Kernesti: 0 | Ernesti: 0")
+        self.score_display.pack(side=tk.TOP, padx=5, pady=5, fill=tk.X)
 
-        # Reset-painike
-        self.reset_btn = tk.Button(self.root, text="Reset Scores", command=self.reset_scores)
-        self.reset_btn.pack()
+        # Painikkeet
+        button_frame = Frame(root)
+        button_frame.pack(pady=10)
+
+        self.throw_kernesti = tk.Button(button_frame, text="Kernesti heittää", command=lambda: self.kernesti_throw_tomato())
+        self.throw_kernesti.pack(side=tk.LEFT, padx=5)
+
+        self.throw_ernesti = tk.Button(button_frame, text="Ernesti heittää", command=lambda: self.ernesti_throw_tomato())
+        self.throw_ernesti.pack(side=tk.LEFT, padx=5)
+
+        # Ernesti oikealle reunalle
+        self.ernesti_move_btn = tk.Button(button_frame, text="Siirrä Ernesti", command=self.move_ernesti)
+        self.ernesti_move_btn.pack(side=tk.LEFT, padx=5)
+        self.ernesti_label = tk.Label(self.root, image=self.ernesti_img)
+        ernesti_x = 800-100
+        ernesti_y = random.randint(0, 500)
+        self.ernesti_label.place(x=ernesti_x, y=ernesti_y)
+
+        self.reset_button = Button(button_frame, text="Nollaa tulokset", command=self.reset_scores)
+        self.reset_button.pack(side=tk.LEFT, padx=5)
 
     def move_ernesti(self):
         self.ernesti_label.place(x=700, y=random.randint(0, 500))
 
-    def throw_tomato(self, thrower):
-        if thrower == "Ernesti":
-            start_x = 700
-            start_y = self.ernesti_label.winfo_y() + self.ernesti_img.height() // 2
-            direction = -1
-        elif thrower == "Kernesti":
-            start_x = 0
-            start_y = self.kernesti_label.winfo_y() + self.kernesti_img.height() // 2
-            direction = 1
-        else:
-            return
+    def kernesti_throw_tomato(self):
+        tx = 0
+        ty = self.kernesti_label.winfo_y() + self.kernesti_img.height() // 2
+        direction = 1
     
-        tomato = tk.Label(self.root, image=self.tomato_img)
-        tomato.place(x=start_x, y=start_y)
+        tomato = tk.Label(self.root, image=self.tomaatti_img)
+        tomato.place(x=tx, y=ty)
 
-        # Create a splat label but don't place it yet
-        splat = tk.Label(self.root, image=self.splat_img)
-        
+        self.throw_sound.play()
+
+        dy = random.randint(-2000,2000)/500.0
+
+        winthrow = self.kernesti_score - self.ernesti_score >= 2
+
         def move_tomato():
-            current_x = tomato.winfo_x()
-            current_y = tomato.winfo_y()
-            if current_x != 400:  # Move towards the target
-                new_x = current_x + 5 * direction
-                new_y = start_y - (400 - new_x) * 0.2  # This creates the arc
-                tomato.place(x=new_x, y=new_y)
-                if new_x != 400:
+            nonlocal tx
+            nonlocal ty
+
+            limit = 400
+            if winthrow:
+                limit = 700
+
+            if tx != limit:  # Move towards the target
+                tx = tx + 5 * direction
+                ty = ty + dy
+                tomato.place(x=tx, y=ty)
+                if tx != limit:
                     self.root.after(20, move_tomato)
                 else:
                     tomato.destroy()
-                    winsound.Beep(440, 100)  # Sound for tomato flight
-                    self.check_hit(new_x, new_y)
-            else:
-                tomato.destroy()
-                # Here we check if we should show the splat
-                self.show_splat(new_x, new_y, splat)
-
-        def show_splat(x, y, splat_label):
-            target_x, target_y = self.target_label.winfo_x(), self.target_label.winfo_y()
-            # Check if the tomato is close enough to the target to warrant a splat
-            if (target_x - 50 < x < target_x + 200) and (target_y - 50 < y < target_y + 200):
-                splat_label.place(x=target_x + 75, y=target_y + 75)  # Place splat at the center of the target
-                # Optionally, remove the splat after a short time
-                self.root.after(1000, lambda: splat_label.place_forget())  # Hide after 1 second
+                    self.hit_sound.play()
+                    target_hit = self.check_hit(tx, ty + 35, winthrow)
+                    if target_hit:
+                        if winthrow:
+                            pass
+                        else:
+                            self.kernesti_score += 1
+                            self.update_scores()
+                            threading.Thread(target=self.show_splat, daemon=True).start()
+                    else:
+                        self.missed_sound.play()
+                        threading.Thread(target=self.show_failure, daemon=True).start()
 
         threading.Thread(target=move_tomato, daemon=True).start()
+
+    def ernesti_throw_tomato(self):
+        tx = 700
+        ty = self.ernesti_label.winfo_y() + self.ernesti_img.height() // 2
+        direction = -1
     
-    def check_hit(self, x, y):
-        target_x, target_y = self.target_label.winfo_x(), self.target_label.winfo_y()
-        if target_x - 50 < x < target_x + 200 and target_y - 50 < y < target_y + 200:
-            messagebox.showinfo("Osuma!", "Tomaatti osui maalitauluun!")
+        tomato = tk.Label(self.root, image=self.tomaatti_img)
+        tomato.place(x=tx, y=ty)
+
+        self.throw_sound.play()
+        dy = random.randint(-2000,2000)/500.0
+        def move_tomato():
+            nonlocal tx
+            nonlocal ty
+            if tx != 400:  # Move towards the target
+                tx = tx + 5 * direction
+                ty = ty + dy  # start_y - (400 - tx) * 0.2  # This creates the arc
+                tomato.place(x=tx, y=ty)
+                if tx != 400:
+                    self.root.after(20, move_tomato)
+                else:
+                    tomato.destroy()
+                    self.hit_sound.play()
+                    target_hit = self.check_hit(tx, ty + 35)
+                    if target_hit:
+                        self.ernesti_score += 1
+                        self.update_scores()
+                        threading.Thread(target=self.show_splat, daemon=True).start()
+                    else:
+                        self.missed_sound.play()
+                        threading.Thread(target=self.show_failure, daemon=True).start()                    
+                
+        threading.Thread(target=move_tomato, daemon=True).start()
+    
+    def show_splat(self):
+        splat_label = tk.Label(self.root, image=self.tosuma_img)
+        splat_label.place(x=400, y=300)
+        time.sleep(1)
+        splat_label.destroy()
+
+    def show_failure(self):
+        failure_label = tk.Label(self.root, text="Ohi meni!", fg="red", font=("Helvetica", 16))
+        failure_label.place(x=400, y=300)
+        time.sleep(1)
+        failure_label.destroy()
+
+    def check_hit(self, y):
+        target_hit = y > 320 and y < 395
+        return target_hit
 
     def reset_scores(self):
-        # Tähän lisätään pisteiden nollauslogiikka
-        pass
-
+        self.ernesti_score = 0
+        self.kernesti_score = 0
+        self.update_scores()
     
+    def update_scores(self):
+        self.score_display.config(text=f"Pisteet: Kernesti: {self.kernesti_score} | Ernesti: {self.ernesti_score} ")
 
 if __name__ == "__main__":
     root = tk.Tk()
