@@ -99,33 +99,24 @@ class TomatoThrowGame:
 
         dy = random.randint(-2000,2000)/500.0
 
-        winthrow = self.kernesti_score - self.ernesti_score >= 2
-
         def move_tomato():
             nonlocal tx
             nonlocal ty
 
-            limit = 400
-            if winthrow:
-                limit = 700
-
-            if tx != limit:  # Move towards the target
+            if tx != 400:  
                 tx = tx + 5 * direction
                 ty = ty + dy
                 tomato.place(x=tx, y=ty)
-                if tx != limit:
+                if tx != 400:
                     self.root.after(20, move_tomato)
                 else:
                     tomato.destroy()
                     self.hit_sound.play()
-                    target_hit = self.check_hit(tx, ty + 35, winthrow)
+                    target_hit = self.check_hit(ty + 35)
                     if target_hit:
-                        if winthrow:
-                            pass
-                        else:
-                            self.kernesti_score += 1
-                            self.update_scores()
-                            threading.Thread(target=self.show_splat, daemon=True).start()
+                        self.kernesti_score += 1
+                        self.update_scores()
+                        threading.Thread(target=self.show_splat, daemon=True).start()
                     else:
                         self.missed_sound.play()
                         threading.Thread(target=self.show_failure, daemon=True).start()
@@ -145,16 +136,16 @@ class TomatoThrowGame:
         def move_tomato():
             nonlocal tx
             nonlocal ty
-            if tx != 400:  # Move towards the target
+            if tx != 400:  
                 tx = tx + 5 * direction
-                ty = ty + dy  # start_y - (400 - tx) * 0.2  # This creates the arc
+                ty = ty + dy 
                 tomato.place(x=tx, y=ty)
                 if tx != 400:
                     self.root.after(20, move_tomato)
                 else:
                     tomato.destroy()
                     self.hit_sound.play()
-                    target_hit = self.check_hit(tx, ty + 35)
+                    target_hit = self.check_hit(ty + 35)
                     if target_hit:
                         self.ernesti_score += 1
                         self.update_scores()
@@ -165,27 +156,32 @@ class TomatoThrowGame:
                 
         threading.Thread(target=move_tomato, daemon=True).start()
     
+    # Osuman näyttäminen
     def show_splat(self):
         splat_label = tk.Label(self.root, image=self.tosuma_img)
         splat_label.place(x=400, y=300)
         time.sleep(1)
         splat_label.destroy()
 
+    # Epäonnistunut osuma
     def show_failure(self):
         failure_label = tk.Label(self.root, text="Ohi meni!", fg="red", font=("Helvetica", 16))
         failure_label.place(x=400, y=300)
         time.sleep(1)
         failure_label.destroy()
 
+    # Osumatarkkuus
     def check_hit(self, y):
-        target_hit = y > 320 and y < 395
+        target_hit = y > 320 and y < 395 # Osumatarkkuus on aika pieni eli sisemmän rinkulan halkaisija noin suurin piirtein
         return target_hit
 
+    # Pisteiden nollaus
     def reset_scores(self):
         self.ernesti_score = 0
         self.kernesti_score = 0
         self.update_scores()
     
+    # Pisteiden päivitys tulostaulukkoon
     def update_scores(self):
         self.score_display.config(text=f"Pisteet: Kernesti: {self.kernesti_score} | Ernesti: {self.ernesti_score} ")
 
